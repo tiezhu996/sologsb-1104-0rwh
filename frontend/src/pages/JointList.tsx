@@ -4,6 +4,8 @@ import { BlankPanel } from '../components/common/BlankPanel'
 import { DifficultyTag } from '../components/common/DifficultyTag'
 import { useJointStore } from '../stores/jointStore'
 import type { JointDifficulty, JointFamily, JointName, JointType } from '../types/jointType'
+import type { Member } from '../types/member'
+import { MEASURE_STATUS_META, summarizeJointMeasures, type MemberMeasureStatus } from '../utils/measurement'
 import { exportAllData } from '../utils/export'
 
 interface JointFormState {
@@ -196,7 +198,7 @@ export default function JointList() {
                           <JointCard
                             key={joint.id}
                             joint={joint}
-                            memberCount={members.filter((member) => member.jointTypeId === joint.id).length}
+                            jointMembers={members.filter((member) => member.jointTypeId === joint.id)}
                             stepCount={stepCounts[joint.id] ?? 0}
                           />
                         ))}
@@ -215,15 +217,19 @@ export default function JointList() {
 
 interface JointCardProps {
   joint: JointType
-  memberCount: number
+  jointMembers: Member[]
   stepCount: number
 }
 
-function JointCard({ joint, memberCount, stepCount }: JointCardProps) {
+const CARD_STATUS_ORDER: MemberMeasureStatus[] = ['qualified', 'repair', 'stale', 'unregistered']
+
+function JointCard({ joint, jointMembers, stepCount }: JointCardProps) {
+  const measureCounts = summarizeJointMeasures(jointMembers)
   return (
     <Link
       to={`/joints/${joint.id}`}
       data-testid="row-joint"
+      data-ready={measureCounts.readyToAssemble ? 'true' : 'false'}
       className="panel group relative overflow-hidden p-5 transition hover:-translate-y-0.5 hover:border-wood-500 hover:shadow-md"
     >
       <div className="absolute right-0 top-0 h-20 w-20 rounded-bl-full bg-wood-50 transition group-hover:bg-wood-100" />
@@ -236,10 +242,25 @@ function JointCard({ joint, memberCount, stepCount }: JointCardProps) {
           <DifficultyTag difficulty={joint.difficulty} compact />
         </div>
         <p className="mt-4 min-h-12 text-sm leading-6 text-stone-600">{joint.strengthNote}</p>
-        <div className="mt-5 flex items-center gap-4 border-t border-stone-100 pt-4 text-xs text-stone-500">
-          <span><strong className="mr-1 text-base text-wood-700">{memberCount}</strong>件构件</span>
+        <div
+          className="mt-5 grid grid-cols-4 gap-1.5 border-t border-stone-100 pt-4 text-center"
+          data-testid="card-measure-summary"
+        >
+          {CARD_STATUS_ORDER.map((status) => (
+            <div key={status} className="rounded-lg bg-stone-50 px-1 py-1.5">
+              <strong className={`block text-sm leading-5 ${MEASURE_STATUS_META[status].chipClass}`} data-testid={`card-count-${status}`}>
+                {measureCounts[status]}
+              </strong>
+              <span className="block text-[10px] text-stone-500">{MEASURE_STATUS_META[status].label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex items-center gap-4 text-xs text-stone-500">
+          <span><strong className="mr-1 text-base text-wood-700">{measureCounts.total}</strong>件构件</span>
           <span><strong className="mr-1 text-base text-wood-700">{stepCount}</strong>步拆装</span>
-          <span className="ml-auto text-wood-700">{joint.glueNeeded ? '配合用胶' : '免胶结构'}</span>
+          <span className={`ml-auto font-medium ${measureCounts.readyToAssemble ? 'text-emerald-700' : 'text-wood-700'}`}>
+            {measureCounts.readyToAssemble ? '可进入装配' : joint.glueNeeded ? '配合用胶' : '免胶结构'}
+          </span>
         </div>
       </div>
     </Link>

@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import type { Furniture, FurnitureName } from '../types/furniture'
 import type { JointType } from '../types/jointType'
-import type { Member } from '../types/member'
+import type { Member, MemberMeasurement } from '../types/member'
 import { db, ensureSeedData } from '../utils/db'
+import { currentBaseline } from '../utils/measurement'
 
 export type JointDraft = Omit<JointType, 'id' | 'schemaRev'>
 export type FurnitureDraft = Omit<Furniture, 'id' | 'schemaRev'>
@@ -23,6 +24,10 @@ interface JointState {
     dimensions: Pick<Member, 'lengthMm' | 'widthMm' | 'thicknessMm' | 'toleranceMm'>,
   ) => Promise<void>
   renameMember: (memberId: string, name: Member['name']) => Promise<void>
+  registerMemberMeasurement: (
+    memberId: string,
+    values: Pick<MemberMeasurement, 'lengthMm' | 'widthMm' | 'thicknessMm'>,
+  ) => Promise<void>
 }
 
 function createId(prefix: string): string {
@@ -101,6 +106,23 @@ export const useJointStore = create<JointState>((set, get) => ({
     set((state) => ({
       members: state.members.map((member) => (
         member.id === memberId ? { ...member, name } : member
+      )),
+    }))
+  },
+
+  registerMemberMeasurement: async (memberId, values) => {
+    const member = get().members.find((item) => item.id === memberId)
+    if (!member) return
+    const measurement: MemberMeasurement = {
+      ...values,
+      measuredAt: new Date().toISOString(),
+      // 以当前理论尺寸与允许偏差为登记依据；之后这些依据调整，本组实测即作废
+      baseline: currentBaseline(member),
+    }
+    await db.members.update(memberId, { measurement })
+    set((state) => ({
+      members: state.members.map((item) => (
+        item.id === memberId ? { ...item, measurement } : item
       )),
     }))
   },

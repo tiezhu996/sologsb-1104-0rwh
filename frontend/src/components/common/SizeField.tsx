@@ -7,9 +7,10 @@ interface SizeFieldProps {
   toleranceMm: number
   onChange?: (valueMm: number) => void
   readOnly?: boolean
+  showHint?: boolean
 }
 
-export function SizeField({ label, valueMm, toleranceMm, onChange, readOnly = false }: SizeFieldProps) {
+export function SizeField({ label, valueMm, toleranceMm, onChange, readOnly = false, showHint = true }: SizeFieldProps) {
   const [unit, setUnit] = useState<'mm' | '寸'>('mm')
   const displayedValue = roundMeasure(unit === 'mm' ? valueMm : mmToCun(valueMm), 2)
 
@@ -48,7 +49,7 @@ export function SizeField({ label, valueMm, toleranceMm, onChange, readOnly = fa
         />
         <span className="border-l border-wood-100 px-2.5 py-2 text-xs text-stone-500">{unit}</span>
       </div>
-      <p className="text-[11px] text-stone-500">配合公差 ±{formatDimension(toleranceMm)}</p>
+      {showHint ? <p className="text-[11px] text-stone-500">配合公差 ±{formatDimension(toleranceMm)}</p> : null}
     </div>
   )
 }
