@@ -2,8 +2,11 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { BlankPanel } from '../components/common/BlankPanel'
 import { DifficultyTag } from '../components/common/DifficultyTag'
+import { InspectionBadge } from '../components/common/InspectionBadge'
 import { useJointStore } from '../stores/jointStore'
+import type { Member } from '../types/member'
 import type { JointDifficulty, JointFamily, JointName, JointType } from '../types/jointType'
+import { summarizeInspection } from '../utils/inspection'
 import { exportAllData } from '../utils/export'
 
 interface JointFormState {
@@ -196,7 +199,7 @@ export default function JointList() {
                           <JointCard
                             key={joint.id}
                             joint={joint}
-                            memberCount={members.filter((member) => member.jointTypeId === joint.id).length}
+                            jointMembers={members.filter((member) => member.jointTypeId === joint.id)}
                             stepCount={stepCounts[joint.id] ?? 0}
                           />
                         ))}
@@ -215,11 +218,12 @@ export default function JointList() {
 
 interface JointCardProps {
   joint: JointType
-  memberCount: number
+  jointMembers: Member[]
   stepCount: number
 }
 
-function JointCard({ joint, memberCount, stepCount }: JointCardProps) {
+function JointCard({ joint, jointMembers, stepCount }: JointCardProps) {
+  const counts = summarizeInspection(jointMembers)
   return (
     <Link
       to={`/joints/${joint.id}`}
@@ -236,8 +240,14 @@ function JointCard({ joint, memberCount, stepCount }: JointCardProps) {
           <DifficultyTag difficulty={joint.difficulty} compact />
         </div>
         <p className="mt-4 min-h-12 text-sm leading-6 text-stone-600">{joint.strengthNote}</p>
-        <div className="mt-5 flex items-center gap-4 border-t border-stone-100 pt-4 text-xs text-stone-500">
-          <span><strong className="mr-1 text-base text-wood-700">{memberCount}</strong>件构件</span>
+        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-stone-100 pt-4" data-testid="card-inspection">
+          <InspectionBadge status="qualified" count={counts.qualified} />
+          <InspectionBadge status="repair" count={counts.repair} />
+          <InspectionBadge status="stale" count={counts.stale} />
+          <InspectionBadge status="unregistered" count={counts.unregistered} />
+        </div>
+        <div className="mt-3 flex items-center gap-4 text-xs text-stone-500">
+          <span><strong className="mr-1 text-base text-wood-700">{counts.total}</strong>件构件</span>
           <span><strong className="mr-1 text-base text-wood-700">{stepCount}</strong>步拆装</span>
           <span className="ml-auto text-wood-700">{joint.glueNeeded ? '配合用胶' : '免胶结构'}</span>
         </div>

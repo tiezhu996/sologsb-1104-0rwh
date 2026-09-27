@@ -2,11 +2,14 @@ import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { BlankPanel } from '../components/common/BlankPanel'
 import { DifficultyTag } from '../components/common/DifficultyTag'
+import { InspectionBadge } from '../components/common/InspectionBadge'
+import { MeasurementEditor } from '../components/common/MeasurementEditor'
 import { SizeField } from '../components/common/SizeField'
 import { StepRail } from '../components/common/StepRail'
 import { useStepOrder } from '../hooks/useStepOrder'
 import { useJointStore } from '../stores/jointStore'
-import { checkTolerance, formatDimension } from '../utils/measure'
+import { formatDimension } from '../utils/measure'
+import { inspectMember, isReadyForAssembly, summarizeInspection } from '../utils/inspection'
 import { exportJointData } from '../utils/export'
 
 export default function JointDetail() {
@@ -29,6 +32,8 @@ export default function JointDetail() {
     .filter((member) => member.jointTypeId === id)
     .sort((a, b) => a.lengthMm - b.lengthMm)
   const currentFurniture = furniture.filter((item) => item.jointTypeId === id)
+  const inspectionCounts = summarizeInspection(currentMembers)
+  const readyForAssembly = isReadyForAssembly(currentMembers)
 
   if (!joint && !loading) {
     return (
@@ -76,89 +81,149 @@ export default function JointDetail() {
       </section>
 
       <section className="space-y-4">
-        <div className="flex items-end justify-between gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold text-wood-900">构件尺寸与公差</h2>
-            <p className="mt-1 text-sm text-stone-500">按短料优先排列，可直接在毫米与寸之间切换录入。</p>
+            <h2 className="text-xl font-semibold text-wood-900">构件尺寸与实测登记</h2>
+            <p className="mt-1 text-sm text-stone-500">
+              图鉴尺寸为理论值，下料后按件登记实测长、宽、厚，系统对照登记基准计算偏差。
+            </p>
           </div>
-          <span className="text-xs text-stone-500">基准间隙 0.20 mm，允许偏离 ±0.12 mm</span>
+          <div className="flex flex-wrap items-center gap-2" data-testid="inspection-summary">
+            <InspectionBadge status="qualified" count={inspectionCounts.qualified} testId="count-qualified" />
+            <InspectionBadge status="repair" count={inspectionCounts.repair} testId="count-repair" />
+            <InspectionBadge status="stale" count={inspectionCounts.stale} testId="count-stale" />
+            <InspectionBadge status="unregistered" count={inspectionCounts.unregistered} testId="count-unregistered" />
+          </div>
         </div>
+
+        {readyForAssembly ? (
+          <div
+            className="flex flex-wrap items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4"
+            data-testid="assembly-ready"
+          >
+            <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-base text-white">✓</span>
+            <div>
+              <p className="text-sm font-semibold text-emerald-900">整套 {currentMembers.length} 件构件均已实测且偏差在允许范围内，可进入装配。</p>
+              <p className="mt-0.5 text-xs text-emerald-700">实测基准与现行登记尺寸、允许偏差一致，无需复测或修配。</p>
+            </div>
+          </div>
+        ) : currentMembers.length > 0 ? (
+          <div
+            className="flex flex-wrap items-center gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4"
+            data-testid="assembly-pending"
+          >
+            <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-300 text-base text-white">…</span>
+            <div>
+              <p className="text-sm font-semibold text-stone-700">暂不具备装配条件</p>
+              <p className="mt-0.5 text-xs text-stone-500">
+                已合格 {inspectionCounts.qualified} 件，待修配 {inspectionCounts.repair} 件，需复测 {inspectionCounts.stale} 件，未登记 {inspectionCounts.unregistered} 件；需全部合格后方可进入装配。
+              </p>
+            </div>
+          </div>
+        ) : null}
+
         {currentMembers.length === 0 ? (
           <BlankPanel title="尚无构件记录" description="当前类型的构件尺寸仍待补充。" />
         ) : (
           <div className="panel overflow-x-auto">
-            <table className="min-w-[980px] w-full border-collapse text-left text-sm">
+            <table className="min-w-[1240px] w-full border-collapse text-left text-sm">
               <thead className="bg-wood-50 text-xs text-wood-700">
                 <tr>
                   <th className="px-4 py-3 font-semibold">构件</th>
                   <th className="px-4 py-3 font-semibold">归属</th>
                   <th className="px-4 py-3 font-semibold">纹理</th>
-                  <th className="px-4 py-3 font-semibold">长</th>
-                  <th className="px-4 py-3 font-semibold">宽</th>
-                  <th className="px-4 py-3 font-semibold">厚</th>
-                  <th className="px-4 py-3 font-semibold">配合校验</th>
+                  <th className="px-4 py-3 font-semibold">理论尺寸（长 / 宽 / 厚）</th>
+                  <th className="px-4 py-3 font-semibold">允许偏差</th>
+                  <th className="px-4 py-3 font-semibold">实测登记（长 / 宽 / 厚）</th>
+                  <th className="px-4 py-3 font-semibold">检验结论</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {currentMembers.map((member) => {
-                  const tolerance = checkTolerance(member.toleranceMm, 0.2, 0.12)
+                  const inspection = inspectMember(member)
+                  const failedDimensions = inspection.dimensions.filter((dimension) => !dimension.withinTolerance)
                   return (
-                    <tr key={member.id} className="align-top">
+                    <tr key={member.id} className="align-top" data-testid={`member-row-${member.id}`}>
                       <td className="px-4 py-4">
                         <strong className="block text-stone-900">{member.name}</strong>
                         <span className="mt-1 block max-w-52 text-xs leading-5 text-stone-500">{member.note}</span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-4 text-stone-600">{member.part}</td>
                       <td className="whitespace-nowrap px-4 py-4 text-stone-600">{member.grainDir}</td>
-                      <td className="w-32 px-3 py-3">
-                        <SizeField
-                          label={`${member.name}长度`}
-                          valueMm={member.lengthMm}
-                          toleranceMm={member.toleranceMm}
-                          onChange={(value) => void updateMemberDimensions(member.id, {
-                            lengthMm: value,
-                            widthMm: member.widthMm,
-                            thicknessMm: member.thicknessMm,
-                            toleranceMm: member.toleranceMm,
-                          })}
-                        />
+                      <td className="px-3 py-3">
+                        <div className="grid w-[240px] grid-cols-3 gap-2">
+                          <SizeField
+                            label={`${member.name}理论长度`}
+                            valueMm={member.lengthMm}
+                            toleranceMm={member.toleranceMm}
+                            onChange={(value) => void updateMemberDimensions(member.id, {
+                              lengthMm: value,
+                              widthMm: member.widthMm,
+                              thicknessMm: member.thicknessMm,
+                              toleranceMm: member.toleranceMm,
+                            })}
+                          />
+                          <SizeField
+                            label={`${member.name}理论宽度`}
+                            valueMm={member.widthMm}
+                            toleranceMm={member.toleranceMm}
+                            onChange={(value) => void updateMemberDimensions(member.id, {
+                              lengthMm: member.lengthMm,
+                              widthMm: value,
+                              thicknessMm: member.thicknessMm,
+                              toleranceMm: member.toleranceMm,
+                            })}
+                          />
+                          <SizeField
+                            label={`${member.name}理论厚度`}
+                            valueMm={member.thicknessMm}
+                            toleranceMm={member.toleranceMm}
+                            onChange={(value) => void updateMemberDimensions(member.id, {
+                              lengthMm: member.lengthMm,
+                              widthMm: member.widthMm,
+                              thicknessMm: value,
+                              toleranceMm: member.toleranceMm,
+                            })}
+                          />
+                        </div>
                       </td>
-                      <td className="w-32 px-3 py-3">
+                      <td className="whitespace-nowrap px-4 py-4">
                         <SizeField
-                          label={`${member.name}宽度`}
-                          valueMm={member.widthMm}
+                          label={`${member.name}允许偏差`}
+                          valueMm={member.toleranceMm}
                           toleranceMm={member.toleranceMm}
                           onChange={(value) => void updateMemberDimensions(member.id, {
                             lengthMm: member.lengthMm,
-                            widthMm: value,
-                            thicknessMm: member.thicknessMm,
-                            toleranceMm: member.toleranceMm,
-                          })}
-                        />
-                      </td>
-                      <td className="w-32 px-3 py-3">
-                        <SizeField
-                          label={`${member.name}厚度`}
-                          valueMm={member.thicknessMm}
-                          toleranceMm={member.toleranceMm}
-                          onChange={(value) => void updateMemberDimensions(member.id, {
-                            lengthMm: member.lengthMm,
                             widthMm: member.widthMm,
-                            thicknessMm: value,
-                            toleranceMm: member.toleranceMm,
+                            thicknessMm: member.thicknessMm,
+                            toleranceMm: value,
                           })}
                         />
                       </td>
-                      <td className="w-52 px-4 py-4">
-                        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
-                          tolerance.withinTolerance
-                            ? 'bg-emerald-50 text-emerald-800'
-                            : 'bg-rose-50 text-rose-800'
-                        }`}>
-                          {tolerance.withinTolerance ? '配合合适' : '需要修配'}
-                        </span>
-                        <p className="mt-2 text-xs leading-5 text-stone-500">{tolerance.message}</p>
-                        <p className="mt-1 text-[11px] text-stone-400">登记公差 {formatDimension(member.toleranceMm, 'mm', 2)}</p>
+                      <td className="w-80 px-4 py-4">
+                        <MeasurementEditor member={member} />
+                      </td>
+                      <td className="w-56 px-4 py-4" data-testid={`verdict-${member.id}`}>
+                        <InspectionBadge status={inspection.status} testId={`status-${member.id}`} />
+                        {inspection.status === 'unregistered' ? (
+                          <p className="mt-2 text-xs leading-5 text-stone-500">尚未登记实测尺寸，先按实测下料结果补录长、宽、厚。</p>
+                        ) : null}
+                        {inspection.status === 'stale' ? (
+                          <p className="mt-2 text-xs leading-5 text-amber-700">
+                            登记基准已变化，原实测偏差最大 {formatDimension(inspection.maxDeviationMm)}，数据作废需复测。
+                          </p>
+                        ) : null}
+                        {inspection.status === 'repair' ? (
+                          <p className="mt-2 text-xs leading-5 text-rose-700">
+                            {failedDimensions.map((dimension) => dimension.label).join('、')}
+                            超差，最大超差 {formatDimension(inspection.maxExceededMm)}，标记为待修配。
+                          </p>
+                        ) : null}
+                        {inspection.status === 'qualified' ? (
+                          <p className="mt-2 text-xs leading-5 text-emerald-700">
+                            三个方向偏差均在 ±{formatDimension(member.toleranceMm, 'mm', 2)} 内，最大偏差 {formatDimension(inspection.maxDeviationMm)}。
+                          </p>
+                        ) : null}
                       </td>
                     </tr>
                   )

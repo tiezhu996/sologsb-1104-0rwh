@@ -1,11 +1,14 @@
 import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { BlankPanel } from '../components/common/BlankPanel'
+import { InspectionBadge } from '../components/common/InspectionBadge'
+import { MeasurementEditor } from '../components/common/MeasurementEditor'
 import { SizeField } from '../components/common/SizeField'
 import { SvgCanvas } from '../components/common/SvgCanvas'
 import { useSvgHitAreas } from '../hooks/useSvgHitAreas'
 import { useDiagramStore } from '../stores/diagramStore'
 import { useJointStore } from '../stores/jointStore'
+import { inspectMember } from '../utils/inspection'
 import type { MemberName } from '../types/member'
 
 export default function DiagramEditor() {
@@ -161,6 +164,13 @@ export default function DiagramEditor() {
                       <div><dt className="text-stone-500">归属</dt><dd className="mt-1 font-medium text-wood-900">{selectedMember.part}</dd></div>
                       <div><dt className="text-stone-500">纹理</dt><dd className="mt-1 font-medium text-wood-900">{selectedMember.grainDir}</dd></div>
                     </dl>
+                    <div className="space-y-2 border-t border-wood-100 pt-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-stone-700">下料实测</span>
+                        <InspectionBadge status={inspectMember(selectedMember).status} />
+                      </div>
+                      <MeasurementEditor member={selectedMember} />
+                    </div>
                     <p className="text-xs leading-5 text-stone-500">{selectedMember.note}</p>
                   </div>
                 ) : (

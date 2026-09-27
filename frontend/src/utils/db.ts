@@ -40,6 +40,25 @@ export class MortiseDatabase extends Dexie {
         furniture.schemaRev = 2
       })
     })
+    // version(3)：构件支持登记实测尺寸与登记基准（Member.measurement）。
+    // 旧构件没有 measurement 字段，按“未登记”处理，无需回填。
+    this.version(3).stores(schema).upgrade(async (transaction) => {
+      await transaction.table<JointType, string>('joints').toCollection().modify((joint) => {
+        joint.schemaRev = 3
+      })
+      await transaction.table<Member, string>('members').toCollection().modify((member) => {
+        member.schemaRev = 3
+      })
+      await transaction.table<DisassemblyStep, string>('steps').toCollection().modify((step) => {
+        step.schemaRev = 3
+      })
+      await transaction.table<Diagram, string>('diagrams').toCollection().modify((diagram) => {
+        diagram.schemaRev = 3
+      })
+      await transaction.table<Furniture, string>('furniture').toCollection().modify((furniture) => {
+        furniture.schemaRev = 3
+      })
+    })
   }
 }
 
@@ -176,11 +195,11 @@ export const db = new MortiseDatabase()
 
 async function writeSeedData(): Promise<void> {
   await db.transaction('rw', [db.joints, db.members, db.steps, db.diagrams, db.furniture], async () => {
-    await db.joints.bulkAdd(jointSeeds.map((item) => ({ ...item, schemaRev: 2 })))
-    await db.members.bulkAdd(memberSeeds.map((item) => ({ ...item, schemaRev: 2 })))
-    await db.steps.bulkAdd(stepSeeds.map((item) => ({ ...item, schemaRev: 2 })))
-    await db.diagrams.bulkAdd(diagramSeeds.map((item) => ({ ...item, schemaRev: 2 })))
-    await db.furniture.bulkAdd(furnitureSeeds.map((item) => ({ ...item, schemaRev: 2 })))
+    await db.joints.bulkAdd(jointSeeds.map((item) => ({ ...item, schemaRev: 3 })))
+    await db.members.bulkAdd(memberSeeds.map((item) => ({ ...item, schemaRev: 3 })))
+    await db.steps.bulkAdd(stepSeeds.map((item) => ({ ...item, schemaRev: 3 })))
+    await db.diagrams.bulkAdd(diagramSeeds.map((item) => ({ ...item, schemaRev: 3 })))
+    await db.furniture.bulkAdd(furnitureSeeds.map((item) => ({ ...item, schemaRev: 3 })))
   })
 }
 
